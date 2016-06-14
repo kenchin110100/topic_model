@@ -33,6 +33,10 @@ class DNP(object):
         self._list_dict_word_prob = []
         # 各トピックの事前確率を記録するリスト
         self._list_topic_prob = []
+        # クラスタリング後のノードを記録
+        self._list_cluster_node = None
+        # クラスタリングされた際のクラスタ数を記録
+        self._K = None
 
 
     @property
@@ -127,18 +131,20 @@ class DNP(object):
 
             return {"vertex": list_vertex, "edge": list_edge_rev, "weight": list_weight}
 
-    def _cal_cluster_to_network(self, dict_network):
+    def _cal_cluster_to_network(self, dict_network, flag_OPIC):
         if dict_network.has_key("cluster") == False:
             print "クラスタリングができていません"
             return []
 
+        if flag_OPIC == True:
+            list_cluster_vertex = self._cal_opic(dict_network, threshold=self.threshold, iteration=self.iteration)
         # クラスタごとにwordをまとめる
-        dict_cluster = collections.defaultdict(list)
-        for word, cluster in zip(dict_network["vertex"], dict_network["cluster"]):
-            dict_cluster[cluster].append(word)
-
-        # リストに変換
-        list_cluster_vertex = [row[1] for row in dict_cluster.items()]
+        else:
+            dict_cluster = collections.defaultdict(list)
+            for word, cluster in zip(dict_network["vertex"], dict_network["cluster"]):
+                dict_cluster[cluster].append(word)
+            # リストに変換
+            list_cluster_vertex = [row[1] for row in dict_cluster.items()]
 
         # 同様にエッジとウェイトのリストも作成する
         list_cluster_edge = []
@@ -163,6 +169,49 @@ class DNP(object):
                                 in zip(list_cluster_edge, list_cluster_weight)]
 
         return list_dict_subnetwork
+
+    # OPICアプローチの計算
+    def _cal_opic(self, dict_network, threshold, iteration):
+        # ノード、エッジ、ウェイト、クラスタのリストの作成
+        list_vertex = dict_network['vertex']
+        list_cluster = dict_network['cluster']
+        list_weight = dict_network['weight']
+        list_edge = dict_network['edge']
+        # クラスタ数の記録
+        K = len(set(list_cluster))
+
+        # クラスタごとのノード、ノードに対応するクラスタを返す辞書の作成
+        list_cluster_node = [[] for i in range(K)]
+        for cluster, vertex in zip(list_cluster, list_vertex):
+            list_cluster_node[cluster].append(vertex)
+        dict_node_cluster = {node:[i] for i, row in enumerate(list_cluster_node) for node in row}
+
+        # ここより以下が再計算の対象
+        for i in range(iteration):
+            dict_node_weight = self._cal_opic_iteration(list_cluster_node, dict_node_cluster, K, list_weight, list_edge, list_vertex)
+            # 閾値をもとに、新しく割り当てられたクラスタに追加する
+            for node, row in dict_node_weight.items():
+                for index in np.where(dict_node_weight[node] > threshold)[0]:
+                    if node not in list_cluster_node[index]:
+                        list_cluster_node[index].append(node)
+                        dict_node_cluster[node].append(index)
+
+        return list_cluster_node
+
+    # OPICアプローチの中で再帰的の計算される部分
+    def _cal_opic_iteration(self, list_cluster_node, dict_node_cluster, K, list_weight, list_edge, list_vertex):
+        # 各ノードが各クラスタに対して持っているノード数を記録
+        dict_node_weight = {node: np.array([0.0 for i in range(K)]) for node in list_vertex}
+        # エッジを計算
+        for edge, weight in zip(list_edge, list_weight):
+            for c in dict_node_cluster[edge[0]]:
+                dict_node_weight[edge[1]][c] += weight
+            for c in dict_node_cluster[edge[1]]:
+                dict_node_weight[edge[0]][c] += weight
+        for key, row in dict_node_weight.items():
+            dict_node_weight[key] /= np.sum(row)
+
+        return dict_node_weight
 
     # 凸２次計画問題を解いてp(topic)を求めるための関数
     def _cal_prob_topic(self, dict_network_master, list_dict_subnetwork):
@@ -328,8 +377,12 @@ class DNP(object):
 
 
     # 計算をするメインの関数
-    def calculation(self, low_freq=0.002, low_rate=0.6, n=0, flag_DN=True, flag_louvain=False):
+    def calculation(self, n=0, flag_louvain=False, flag_OPIC=False, threshold=0.3, iteration=1):
+        # DNをするフラッグ（多分することはないから中だし）
+        flag_DN = False
         # 内部変数の初期化
+        self.threshold = threshold
+        self.iteration = iteration
         self._list_dict_subnetwork = []
         self._dict_network_master_dammy = copy.deepcopy(self._dict_network_master)
         self._list_dict_word_prob = []
@@ -353,7 +406,7 @@ class DNP(object):
         self._dict_network_master_dammy["pagerank"] = self._g_master.pagerank(directed=False, weights=self._dict_network_master_dammy["weight"])
 
         # クラスタ結果をもとにサブグラフのリストを作成
-        self._list_dict_subnetwork = self._cal_cluster_to_network(self._dict_network_master_dammy)
+        self._list_dict_subnetwork = self._cal_cluster_to_network(self._dict_network_master_dammy, flag_OPIC)
 
         # サブクラスタごとに中心性の計算
         for i, dict_subnetwork in enumerate(self._list_dict_subnetwork):
