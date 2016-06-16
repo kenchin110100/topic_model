@@ -159,18 +159,18 @@ class UM():
     def fit(self):
         self.initialize()
         self.likelihood = 0
-        likelihood_tmp = self.cal_likelihood()
+        list_likelihood = []
         for i in range(self.max_iter):
-            self.likelihood = likelihood_tmp
             self.e_step()
             self.m_step()
-            likelihood_tmp = self.cal_likelihood()
             if i % 10 == 0:
+                list_likelihood.append(self.cal_likelihood())
                 print 'finish: ', i+1, ' iteration'
-                print 'likelihood: ', likelihood_tmp
-            if np.fabs(self.likelihood - likelihood_tmp) < self.converge:
-                break
-        self.likelihood = likelihood_tmp
+                print 'likelihood: ', list_likelihood[-1]
+                if len(list_likelihood) > 1:
+                    if np.fabs(list_likelihood[-1] - list_likelihood[-2]) < self.converge:
+                        break
+        self.likelihood = list_likelihood[-1]
         self.list_dict_phi = [{self.dict_id_word[i]: phi
                                for i, phi in enumerate(self.list_phi[z])}
                               for z in range(self.K)]
