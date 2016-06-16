@@ -59,7 +59,7 @@ class Filer(object):
         return lines
 
     @staticmethod
-    def writetxt(arr, path, option="w"):
+    def writetxt(arr, path, option="ab"):
         f = open(path, option)
         for sentence in arr:
             f.writelines(sentence+'\n')

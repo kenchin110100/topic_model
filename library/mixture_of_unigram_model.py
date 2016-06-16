@@ -6,6 +6,7 @@ import random
 import argparse
 import scipy.special
 from collections import defaultdict
+import numpy as np
 
 class MUM:
     def __init__(self, data):
@@ -32,6 +33,18 @@ class MUM:
         # 単語分布
         self.topic_word_freq = defaultdict(lambda: defaultdict(float))
         self.topic_word_sum = defaultdict(float)
+        # inferに使う関数
+        self.list_theta = None
+        self.list_dict_phi = None
+    
+    def cal_theta(self):
+        self.list_theta = [(value+self.alpha)/(self.topic_document_sum+(self.alpha*self.K)) for _, value in self.topic_document_freq.items()]
+        
+    def cal_phi(self):
+        self.list_dict_phi = []
+        for i in range(self.K):
+            dict_phi = {word: (freq+self.beta)/(self.topic_word_sum[i+1]+(self.beta*self.V)) for word, freq in self.topic_word_freq[i+1].items()}
+            self.list_dict_phi.append(dict_phi)
 
     def set_param(self, alpha, beta, K, N, converge):
         self.alpha = alpha
@@ -55,6 +68,8 @@ class MUM:
                     diff = self.lkhds[-1] - self.lkhds[-2]
                     if math.fabs(diff) < self.converge:
                         break
+        self.cal_theta()
+        self.cal_phi()
 
     def initialize(self):
         for song in self.corpus:
@@ -191,29 +206,22 @@ class MUM:
         try:
             # すべての単語が辞書に含まれていなければエラーを上げる
             for word in list_word:
-                if word in self.dict_word_id:
+                if word in self.target_word:
                     break
             else:
                 raise KeyError('No word found in dict')
-            list_theta = []
-            list_phi = []
-            list_prob = []
-            for i in range(self.K+1):
-                list_theta.append((topic_document_freq[i]+self.alpha)/(self.topic_document_sum+(self.alpha*self.K)))
-                dict_phi = {word: (freq+self.beta)/(self.topic_word_sum[i]+self.beta*self.V) for word, freq in topic_word_freq[i].items()}
-                list_phi.append(dict_phi)
+            
             # オーバーフロー対策
             list_overflow = []
             for i in range(self.K):
-                prob = 0.0
-                prob += np.log(list_theta[i])
+                prob = 1
+                prob *= self.list_theta[i]
                 for word in list_word:
-                    if word in list_phi[i]:
-                        prob += np.log(list_phi[i][word])
+                    if word in self.list_dict_phi[i]:
+                        prob *= self.list_dict_phi[i][word]
                 list_overflow.append(prob)
-            max_log = np.max(list_overflow)
-            list_overflow = np.array(list_overflow) - max_log
-            list_prob.append(np.exp(list_overflow)/np.sum(np.exp(list_overflow)))
+            list_overflow = np.array(list_overflow)
+            list_prob = list_overflow/np.sum(list_overflow)
             return list_prob
     
         except KeyError:
