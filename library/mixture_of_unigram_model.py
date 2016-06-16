@@ -190,7 +190,7 @@ class MUM:
     def infer(self, list_word):
         try:
             # すべての単語が辞書に含まれていなければエラーを上げる
-            for word in list_words:
+            for word in list_word:
                 if word in self.dict_word_id:
                     break
             else:
