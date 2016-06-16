@@ -436,32 +436,27 @@ class DNP(object):
             print row[0], row[1]
         print "=============="
 
-class evaluation(object):
+    # infer
+    def infer(self, list_word):
+        list_prob = []
+        for i in range(self._K):
+            prob = None
+            for word in list_word:
+                if word in self._dict_word_prob[i]:
+                    if prob == None:
+                        prob = self._dict_word_prob[i][word]
+                    else:
+                        prob *= self._dict_word_prob[i][word]
+            list_prob.append(prob*self._list_topic_prob[i])
+        list_prob = [num/np.sum(list_prob) for num in list_prob]
+        return list_prob
 
-    def __init__(self, testpath):
-        # テストデータの読み込み
-        self._list_sep_words = Filer.readdump(testpath)
-        self._list_sep_words = [[row[2], row[1]] for row in self._list_sep_words]
-        # 予測_実際ラベルのリストの初期化
-        self._list_predict_measure = []
+
+class Evaluation(object):
+
+    def __init__(self):
         # 結果の初期化
         self._dict_score = {}
-
-    @property
-    def list_predict_measure(self):
-        return self._list_predict_measure
-
-    @list_predict_measure.setter
-    def list_predict_measure(self, value):
-        self._list_predict_measure = value
-
-    @list_predict_measure.getter
-    def list_predict_measure(self):
-        return self._list_predict_measure
-
-    @list_predict_measure.deleter
-    def list_predict_measure(self):
-        del self._list_predict_measure
 
     @property
     def dict_score(self):
@@ -479,45 +474,19 @@ class evaluation(object):
     def dict_score(self):
         del self._dict_score
 
-    # list_predict_measureを計算する
-    def cal_list_predict_measure(self, list_word_prob, list_topic_prob=[]):
-        if list_topic_prob == []:
-            list_topic_prob = [float(1)/len(list_word_prob) for row in list_word_prob]
-        error_count = 0
-        for row in self._list_sep_words:
-            try:
-                class_tmp = 0
-                prob_tmp = 0
-                for num, dict_prob in enumerate(list_word_prob):
-                    prob_tmp_tmp = 1
-                    for word in row[0]:
-                        prob_tmp_tmp *= float(dict_prob[word])
-                    prob_tmp_tmp *= list_topic_prob[num]
-                    if prob_tmp_tmp > prob_tmp:
-                        class_tmp = num
-                        prob_tmp = prob_tmp_tmp
-                self._list_predict_measure.append([class_tmp, row[1]])
-            except:
-                error_count += 1
-
-        print "テストデータ数: ", len(self._list_predict_measure)
-        print "エラーデータ数: ", error_count
-
     # f_measureを計算する
-    def cal_f_measure(self, list_word_prob, list_topic_prob=[]):
+    def cal_f_measure(self, list_predict, list_measure):
         # 内部変数の初期化
         self._dict_score = {}
-        self._list_predict_measure = []
 
-        self.cal_list_predict_measure(list_word_prob, list_topic_prob)
         # 生成したクラスタ内のカウント
         dict_predict_cluster = collections.defaultdict(list)
-        for row in self._list_predict_measure:
+        for row in zip(list_predict, list_measure):
             dict_predict_cluster[row[0]].append(row[1])
 
         # もとあるクラス内のカウント
         dict_measure_cluster = collections.defaultdict(list)
-        for row in self._list_predict_measure:
+        for row in zip(list_predict, list_measure):
             dict_measure_cluster[row[1]].append(row[0])
 
         # local_purityの計算
@@ -537,6 +506,7 @@ class evaluation(object):
         inverse_purity = float(np.sum(zip(*list_inverse_purity)[0])) / np.sum(zip(*list_inverse_purity)[1])
 
         self._dict_score = {"purity": purity, "invpurity":inverse_purity, "fvalue":2/(1/purity+1/inverse_purity)}
+        return self._dict_score
 
     # 計算したスコアを表示する関数
     def show_score(self):

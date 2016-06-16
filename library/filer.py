@@ -51,10 +51,11 @@ class Filer(object):
         f.close()
 
     @staticmethod
-    def readtxt(path):
+    def readtxt(path, LF='\n'):
         f = open(path)
         lines = f.readlines()
         f.close()
+        lines = [row.rstrip(LF) for row in lines]
         return lines
 
     @staticmethod
