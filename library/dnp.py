@@ -17,7 +17,10 @@ class DNP(object):
     def __init__(self, inputpath):
         # データを読み込んで、重み付き向こうグラフに変更する
         self._inputpath = inputpath
-        _list_edge = Filer.readcsv(self._inputpath)
+        if type(self._inputpath) == 'string':
+            _list_edge = Filer.readcsv(self._inputpath)
+        else:
+            _list_edge = inputpath
         self._dict_network_master = self._cal_edgelist_to_network(_list_edge)
         # master用のネットワークを作成
         self._g_master = Graph()
@@ -377,7 +380,7 @@ class DNP(object):
 
 
     # 計算をするメインの関数
-    def calculation(self, n=0, flag_louvain=False, flag_OPIC=False, threshold=0.3, iteration=1):
+    def calculation(self, n=0, flag_louvain=False, flag_OPIC=False, threshold=0.3, iteration=1, directed = False):
         # DNをするフラッグ（多分することはないから中だし）
         flag_DN = False
         # 内部変数の初期化
@@ -403,7 +406,7 @@ class DNP(object):
                     self._dict_network_master_dammy["cluster"] = self._g_master.community_fastgreedy(weights=self._dict_network_master_dammy["weight"]).as_clustering(n=n).membership
 
         # 元のネットワークのpagerankを求める
-        self._dict_network_master_dammy["pagerank"] = self._g_master.pagerank(directed=False, weights=self._dict_network_master_dammy["weight"])
+        self._dict_network_master_dammy["pagerank"] = self._g_master.pagerank(directed=directed, weights=self._dict_network_master_dammy["weight"])
 
         # クラスタ結果をもとにサブグラフのリストを作成
         self._list_dict_subnetwork = self._cal_cluster_to_network(self._dict_network_master_dammy, flag_OPIC)
@@ -413,7 +416,7 @@ class DNP(object):
             g_sub = Graph()
             g_sub.add_vertices(dict_subnetwork["vertex"])
             g_sub.add_edges(dict_subnetwork["edge"])
-            self._list_dict_subnetwork[i]["pagerank"] = g_sub.pagerank(directed=False, weights=dict_subnetwork["weight"])
+            self._list_dict_subnetwork[i]["pagerank"] = g_sub.pagerank(directed=directed, weights=dict_subnetwork["weight"])
 
         # トピックごとにwordを入力したらp(word|topic)が出るような辞書を作成
         for i in range(len(self._list_dict_subnetwork)):
@@ -427,6 +430,7 @@ class DNP(object):
 
         print "クラスタ数: ", len(self._list_dict_word_prob)
         self._list_topic_prob = self._cal_prob_topic(self._dict_network_master_dammy, self._list_dict_subnetwork)
+        self._K = len(self._list_dict_word_prob)
 
     # 計算したトピックを表示するための関数
     def show_topic(self, n, num=10):
@@ -435,22 +439,38 @@ class DNP(object):
         for row in sorted(self.list_dict_word_prob[n].items(), key=lambda x:x[1], reverse=True)[0:num]:
             print row[0], row[1]
         print "=============="
-
-    # infer
-    def infer(self, list_word):
-        list_prob = []
-        for i in range(self._K):
-            prob = None
-            for word in list_word:
-                if word in self._dict_word_prob[i]:
-                    if prob == None:
-                        prob = self._dict_word_prob[i][word]
-                    else:
-                        prob *= self._dict_word_prob[i][word]
-            list_prob.append(prob*self._list_topic_prob[i])
-        list_prob = [num/np.sum(list_prob) for num in list_prob]
-        return list_prob
-
+    
+    # クラスの推定
+    def infer(self, list_words):
+        try:
+            # 学習が先に行われていなければエラーを上げる
+            if self._list_topic_prob == None:
+                raise NameError('calculation first')
+            # すべての単語が辞書に含まれていなければエラーを上げる
+            for word in list_words:
+                if word in self._list_dict_word_prob[0]:
+                    break
+            else:
+                raise KeyError('No word found in dict')
+            # オーバーフロー対策
+            list_overflow = []
+            for i in range(self._K):
+                prob = 0.0
+                prob += np.log(self._list_topic_prob[i])
+                for word in list_words:
+                    if word in self._list_dict_word_prob[i]:
+                        prob += np.log(self._list_dict_word_prob[i][word])
+                list_overflow.append(prob)
+            max_log = np.max(list_overflow)
+            list_prob = np.array([np.exp(num - max_log) for num in list_overflow])
+            # 正規化
+            list_prob = list_prob/np.sum(list_prob)
+            return list_prob
+        
+        except NameError:
+            raise
+        except KeyError:
+            raise
 
 class Evaluation(object):
 
@@ -505,7 +525,7 @@ class Evaluation(object):
             list_inverse_purity.append([major_class, class_num])
         inverse_purity = float(np.sum(zip(*list_inverse_purity)[0])) / np.sum(zip(*list_inverse_purity)[1])
 
-        self._dict_score = {"purity": purity, "invpurity":inverse_purity, "fvalue":2/(1/purity+1/inverse_purity)}
+        self._dict_score = {"purity": purity, "invpurity":inverse_purity, "fvalue":2/(1/purity+1/inverse_purity), 'K': len(set(list_predict))}
         return self._dict_score
 
     # 計算したスコアを表示する関数
