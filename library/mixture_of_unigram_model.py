@@ -70,6 +70,7 @@ class MUM:
                         break
         self.cal_theta()
         self.cal_phi()
+        return self.lkhds[-1]
 
     def initialize(self):
         for song in self.corpus:
