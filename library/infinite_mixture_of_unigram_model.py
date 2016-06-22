@@ -213,8 +213,8 @@ class IMUM:
         list_phi = []
         list_prob = []
         for i in range(self.K+1):
-            list_theta.append((topic_document_freq[i]+self.alpha)/(self.topic_document_sum+(self.alpha*self.K)))
-            dict_phi = {word: (freq+self.beta)/(self.topic_word_sum[i]+self.beta*self.V) for word, freq in topic_word_freq[i].items()}
+            list_theta.append((self.topic_document_freq[i]+self.alpha)/(self.topic_document_sum+(self.alpha*self.K)))
+            dict_phi = {word: (freq+self.beta)/(self.topic_word_sum[i]+self.beta*self.V) for word, freq in self.topic_word_freq[i].items()}
             list_phi.append(dict_phi)
         for i in range(self.K):
             prob = None
