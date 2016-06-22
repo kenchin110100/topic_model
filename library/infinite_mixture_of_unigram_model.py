@@ -6,6 +6,7 @@ import random
 import argparse
 import scipy.special
 from collections import defaultdict
+import numpy as np
 
 class IMUM:
     def __init__(self, data):
@@ -29,9 +30,11 @@ class IMUM:
         # トピック分布
         self.topic_document_freq = defaultdict(float)
         self.topic_document_sum = 0.0
+        self.list_theta = None
         # 単語分布
         self.topic_word_freq = defaultdict(lambda: defaultdict(float))
         self.topic_word_sum = defaultdict(float)
+        self.list_dict_phi = None
 
     def set_param(self, alpha, beta, N, converge):
         self.alpha = alpha
@@ -54,6 +57,8 @@ class IMUM:
                     diff = self.lkhds[-1] - self.lkhds[-2]
                     if math.fabs(diff) < self.converge:
                         break
+        self.cal_theta()
+        self.cal_phi()
 
     def initialize(self):
         for song in self.corpus:
@@ -208,25 +213,48 @@ class IMUM:
             list_b_w.append(document["bag_of_words"])
         return list_state, list_b_w, self.K
     
-    def infer(self, list_word):
-        list_theta = []
-        list_phi = []
-        list_prob = []
+    def cal_theta(self):
+        self.list_theta = []
         for i in range(self.K+1):
-            list_theta.append((self.topic_document_freq[i]+self.alpha)/(self.topic_document_sum+(self.alpha*self.K)))
-            dict_phi = {word: (freq+self.beta)/(self.topic_word_sum[i]+self.beta*self.V) for word, freq in self.topic_word_freq[i].items()}
-            list_phi.append(dict_phi)
-        for i in range(self.K):
-            prob = None
+            self.list_theta.append((self.topic_document_freq[i+1]+self.alpha)/(self.topic_document_sum+(self.alpha*self.K)))
+            
+    def cal_phi(self):
+        self.list_dict_phi = []
+        for i in range(self.K+1):
+            dict_phi = {word: (freq+self.beta)/(self.topic_word_sum[i+1]+self.beta*self.V) for word, freq in self.topic_word_freq[i+1].items()}
+            self.list_dict_phi.append(dict_phi)
+    
+    def infer(self, list_word):
+        list_prob = []
+        try:
+            # 学習が先に行われていなければエラーを上げる
+            if self.list_theta == None:
+                raise NameError('calculation first')
+            # すべての単語が辞書に含まれていなければエラーを上げる
             for word in list_word:
-                if word in dict_phi[i]:
-                    if prob == None:
-                        prob = dict_phi[i][word]
-                    else:
-                        prob *= dict_phi[i][word]
-            list_prob.append(prob*list_theta[i])
-        list_prob = [num / np.sum(list_prob) for num in list_prob]
-        return list_prob
+                if word in self.target_word:
+                    break
+            else:
+                raise KeyError('No word found in dict')
+            # オーバーフロー対策
+            list_overflow = []
+            for i in range(self.K):
+                prob = 0.0
+                prob += np.log(self.list_theta[i])
+                for word in list_word:
+                    if word in self.list_dict_phi[i]:
+                        prob += np.log(self.list_dict_phi[i][word])
+                list_overflow.append(prob)
+            max_log = np.max(list_overflow)
+            list_prob = np.array([np.exp(num - max_log) for num in list_overflow])
+            # 正規化
+            list_prob = list_prob/np.sum(list_prob)
+            return list_prob
+        except NameError:
+            raise
+        except KeyError:
+            raise
+
 
 def main(args):
     imum = IMUM(args.data)

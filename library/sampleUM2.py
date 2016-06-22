@@ -174,6 +174,7 @@ class UM():
                                for i, phi in enumerate(self.list_phi[z])}
                               for z in range(self.K)]
         print 'finish all: ', self.likelihood
+        return self.likelihood
 
     # クラスの推定
     def infer(self, list_words):
