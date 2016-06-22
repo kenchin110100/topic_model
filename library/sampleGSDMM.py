@@ -65,7 +65,7 @@ class GSDMM():
             self.list_bags = list_d_words
         else:
             print 'Error: pathかlistをセットしてください'
-            return None
+            raise KeyError('Error: pathかlistをセットしてください')
 
         # number of vocaburary
         self.V = len(set([word for row in self.list_bags for word in row]))
@@ -83,10 +83,8 @@ class GSDMM():
 
         # dictの作成
         self.dict_word_id, self.dict_id_word = self.make_dict(self.list_bags)
-        # number of occurrence of word w in document d
-        self.list_d_w = self.cal_d_w(self.list_bags)
         # number of words in document d
-        self.list_Nd = np.array([np.sum(row) for row in self.list_d_w], dtype=int)
+        self.list_Nd = np.array([len(row) for row in self.list_bags], dtype=int)
 
     # word_id, id_wordのdict作成
     def make_dict(self, list_bags):
@@ -108,9 +106,8 @@ class GSDMM():
         self.list_z[d] = z
         self.list_mz[z] += 1
         self.list_nz[z] += self.list_Nd[d]
-        non_zero_index = np.nonzero(self.list_d_w[d])[0]
-        for j in non_zero_index:
-            self.list_z_w[z][j] += self.list_d_w[d][j]
+        for word in self.list_bags[d]:
+            self.list_z_w[z][self.dict_word_id[word]] += 1
 
     # 式4の肝心な部分、dはドキュメント番号、zはクラスタの番号
     def cal_pz(self, d, z):
@@ -119,10 +116,8 @@ class GSDMM():
         first -= np.log(np.float(self.D - 1 + self.K*self.alpha))
         # 式5の右側を分子と分母別々に計算、logで記述
         second = 0
-        non_zero_index = np.nonzero(self.list_d_w[d])[0]
-        for i in non_zero_index:
-            for j in range(self.list_d_w[d][i]):
-                second += np.log((self.list_z_w[z][i] + self.beta + j))
+        for word in self.list_bags[d]:
+            second += np.log(self.list_z_w[z][self.dict_word_id[word]] + self.beta)
         for i in range(self.list_Nd[d]):
             second -= np.log(self.list_nz[z] + self.V*self.beta + i)
         # 右側と左側を足したものを返す（log）
@@ -132,9 +127,8 @@ class GSDMM():
     def uninitialize(self, d, z):
         self.list_mz[z] -= 1
         self.list_nz[z] -= self.list_Nd[d]
-        non_zero_index = np.nonzero(self.list_d_w[d])[0]
-        for j in non_zero_index:
-            self.list_z_w[z][j] -= self.list_d_w[d][j]
+        for word in self.list_bags[d]:
+            self.list_z_w[z][self.dict_word_id[word]] -= 1
 
     # トピック分布の推定
     def cal_theta(self):
@@ -150,14 +144,6 @@ class GSDMM():
                           for j, phi in enumerate(list_phi[i])}
                          for i in range(self.K)]
         return list_dict_phi
-
-    # list_d_wの作成
-    def cal_d_w(self, list_bags):
-        list_d_w = np.array([[0 for i in range(self.V)] for i in range(self.D)], dtype=int)
-        for i, row in enumerate(list_bags):
-            for word in row:
-                list_d_w[i][self.dict_word_id[word]] += 1
-        return list_d_w
 
     # コーパスを元に学習
     def fit(self):
@@ -181,8 +167,9 @@ class GSDMM():
 
         self.list_theta = self.cal_theta()
         self.list_dict_phi = self.cal_phi()
-
         print "all finished"
+        return self.list_theta
+        
 
     # 学習した結果を元にコーパスのクラスを推定
     def infer(self, list_words):
