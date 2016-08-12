@@ -7,6 +7,7 @@ import argparse
 import scipy.special
 from collections import defaultdict
 import numpy as np
+from scipy.spatial.distance import cosine
 
 class MUM:
     def __init__(self, data):
@@ -71,6 +72,12 @@ class MUM:
         self.cal_theta()
         self.cal_phi()
         return self.lkhds[-1]
+    
+    def cal_ave_dis(self):
+        list_phi = np.array([[value for key, value in sorted(dict_row.items(), key=lambda x:x[0])] for dict_row in self.list_dict_phi])
+        list_dis = [1-cosine(list_phi[i], list_phi[j]) for i in range(self.K) for j in range(i+1, self.K)]
+        return np.sum(list_dis) / len(list_dis)
+            
 
     def initialize(self):
         for song in self.corpus:
